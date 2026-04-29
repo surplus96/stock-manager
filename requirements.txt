@@ -1,0 +1,39 @@
+# --- Web stack (FastAPI backend) ---
+fastapi>=0.115
+uvicorn[standard]>=0.30
+slowapi>=0.1.9
+
+# --- Core data / analysis ---
+pydantic>=2.7
+python-dotenv>=1.0.1
+requests>=2.32
+pandas>=2.2
+numpy>=1.26
+yfinance>=0.2.50
+python-dateutil>=2.9
+APScheduler>=3.10
+jinja2>=3.1
+diskcache>=5.6
+tqdm>=4.66
+feedparser>=6.0.11
+pyyaml>=6.0.2
+matplotlib>=3.9
+plotly>=5.22
+tenacity>=8.5
+
+# --- MCP server ---
+fastmcp>=0.4.2
+
+# --- Korean market (PyKrx / FinanceDataReader / DART OPEN API) ---
+pykrx>=1.0.45
+finance-datareader>=0.9.94
+OpenDartReader>=0.2.4
+
+# --- Optional providers (uncomment if needed) ---
+# alpha_vantage>=2.3
+# sec-api>=1.0
+# neo4j>=5.22
+# ta>=0.11
+# vectorbt>=0.26
+# langchain-core>=0.3
+# markdownify>=0.13

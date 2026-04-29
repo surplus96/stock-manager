@@ -1,0 +1,156 @@
+@import "tailwindcss";
+
+/*
+ * Dark-mode variant — bind Tailwind's `dark:` prefix to our own
+ * `html[data-theme="dark"]` attribute rather than the default media query
+ * or `.dark` class. This lets <ThemeToggle> drive the whole palette by
+ * flipping one data attribute, and every `dark:bg-slate-900` / `dark:text-slate-50`
+ * across the codebase responds instantly.
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  /* FR-PSP-P01/02 — saturation lowered, single accent. Old: #2962FF/#26A69A/#EF5350 */
+  --accent: #1E3A8A;          /* slate-blue-900 */
+  --accent-soft: rgba(30, 58, 138, 0.08);
+  --primary: var(--accent);   /* alias kept for legacy callers */
+  --secondary: #FF6D00;
+  --positive: #0d9488;        /* teal-600 */
+  --negative: #dc2626;        /* red-600 */
+  --neutral: #78909C;
+  --card-bg: #ffffff;
+  --border: #e2e8f0;
+  --sidebar-bg: #0f172a;
+  --sidebar-text: #94a3b8;
+  --sidebar-active: var(--accent);
+  --muted: #64748b;
+  /* FR-PSP-P03/04 — hairline shadow (Perplexity-style "paper" surface) */
+  --shadow-card: 0 1px 0 rgb(0 0 0 / 0.04);
+  --shadow-hover: 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 4px rgb(0 0 0 / 0.04);
+}
+
+/* FR-U15: dark mode. Activated by setting <html data-theme="dark">.
+   FR-PSP-P05 — near-black background à la Perplexity. */
+html[data-theme="dark"] {
+  --background: #0a0a0a;
+  --foreground: #e2e8f0;
+  --card-bg: #141414;
+  --border: #262626;
+  --sidebar-bg: #050505;
+  --sidebar-text: #94a3b8;
+  --muted: #94a3b8;
+  --accent: #60a5fa;
+  --accent-soft: rgba(96, 165, 250, 0.10);
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.04);
+  --shadow-hover: 0 1px 2px rgb(255 255 255 / 0.05), 0 2px 4px rgb(255 255 255 / 0.03);
+}
+
+/* FR-U17: tabular-nums utility for rankings tables and numeric columns. */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* rich-visual-reports chart palette — consumed by components/charts/*
+   FR-PSP-P02 — saturation lowered to match the new --accent token. */
+:root {
+  --chart-grid:       #e2e8f0;
+  --chart-axis:       #64748b;
+  --chart-tooltip-bg: rgba(15, 23, 42, 0.95);
+  --chart-tooltip-fg: #f8fafc;
+  --chart-pos:        #0d9488;     /* teal-600 (was #10b981) */
+  --chart-neg:        #dc2626;     /* red-600 (was #ef4444) */
+  --chart-neutral:    #64748b;
+  --chart-accent:     #1E3A8A;     /* slate-blue-900 (was #3b82f6) */
+  --chart-accent-2:   #7c3aed;     /* violet-600 (was #8b5cf6) */
+}
+html[data-theme="dark"] {
+  --chart-grid:       #1f1f1f;
+  --chart-axis:       #94a3b8;
+  --chart-tooltip-bg: rgba(255, 255, 255, 0.94);
+  --chart-tooltip-fg: #0f172a;
+  --chart-pos:        #2dd4bf;     /* teal-300 lift for dark */
+  --chart-neg:        #f87171;
+  --chart-neutral:    #94a3b8;
+  --chart-accent:     #60a5fa;
+  --chart-accent-2:   #a78bfa;
+}
+
+/* FR-PSP-T01/02/03 — display serif headings + tighter tracking + roomy prose */
+.font-display {
+  font-family: var(--font-source-serif), Georgia, "Times New Roman", serif;
+  letter-spacing: -0.015em;
+}
+.prose-loose p,
+.prose-loose li {
+  line-height: 1.65;
+}
+.tracking-tight-prose {
+  letter-spacing: -0.01em;
+}
+
+/* FR-PSP-X03 — shimmer skeleton (replaces pulse). prefers-reduced-motion
+   downgrades to a static muted block automatically. */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgb(0 0 0 / 0.04) 25%,
+    rgb(0 0 0 / 0.08) 50%,
+    rgb(0 0 0 / 0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s linear infinite;
+  border-radius: 0.375rem;
+}
+html[data-theme="dark"] .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgb(255 255 255 / 0.05) 25%,
+    rgb(255 255 255 / 0.10) 50%,
+    rgb(255 255 255 / 0.05) 75%
+  );
+  background-size: 200% 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer { animation: none; background: rgb(0 0 0 / 0.06); }
+  html[data-theme="dark"] .skeleton-shimmer { background: rgb(255 255 255 / 0.06); }
+}
+
+/* FR-F12: Design tokens — expose CSS custom props as Tailwind v4 theme keys. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-brand: var(--primary);
+  --color-brand-accent: var(--secondary);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-neutral: var(--neutral);
+  --color-surface: var(--card-bg);
+  --color-border-subtle: var(--border);
+  --color-sidebar: var(--sidebar-bg);
+  --color-sidebar-text: var(--sidebar-text);
+  --color-sidebar-active: var(--sidebar-active);
+  --radius-card: 0.75rem;
+  --radius-pill: 9999px;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 3px rgb(0 0 0 / 0.06);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  /* FR-PSP-T02 — slight negative tracking for body prose */
+  letter-spacing: -0.005em;
+  font-feature-settings: "kern", "tnum";
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }

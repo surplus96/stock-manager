@@ -1,0 +1,242 @@
+/* Stock Manager 기획서 PDF 스타일 */
+
+@page {
+  size: A4;
+  margin: 20mm 18mm 22mm 18mm;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  font-family: -apple-system, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Helvetica Neue", Arial, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.65;
+  color: #1f2937;
+  background: #ffffff;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "tnum" 1, "kern" 1;
+  letter-spacing: -0.005em;
+}
+
+body {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 40px 48px 48px 48px;
+}
+
+/* 제목 계층 */
+h1 {
+  font-size: 26pt;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 12px 0;
+  padding-bottom: 16px;
+  border-bottom: 3px solid #0f172a;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+h1 + p strong {
+  display: block;
+  font-size: 13pt;
+  font-weight: 500;
+  color: #475569;
+  margin-top: 4px;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 16pt;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 36px 0 14px 0;
+  padding: 10px 0 10px 14px;
+  border-left: 4px solid #2563eb;
+  background: linear-gradient(to right, #f1f5f9 0%, transparent 100%);
+  letter-spacing: -0.015em;
+  page-break-after: avoid;
+}
+
+h3 {
+  font-size: 12.5pt;
+  font-weight: 600;
+  color: #1e40af;
+  margin: 22px 0 10px 0;
+  letter-spacing: -0.01em;
+  page-break-after: avoid;
+}
+
+h4 {
+  font-size: 11pt;
+  font-weight: 600;
+  color: #334155;
+  margin: 16px 0 8px 0;
+  page-break-after: avoid;
+}
+
+/* 본문 단락 */
+p {
+  margin: 8px 0 12px 0;
+  text-align: justify;
+  word-break: keep-all;
+  line-height: 1.7;
+}
+
+strong {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+em {
+  font-style: italic;
+  color: #475569;
+}
+
+/* 리스트 */
+ul, ol {
+  margin: 10px 0 14px 0;
+  padding-left: 22px;
+  line-height: 1.7;
+}
+
+li {
+  margin: 5px 0;
+}
+
+li > strong:first-child {
+  color: #0f172a;
+}
+
+/* 인용구 (Executive Summary 강조) */
+blockquote {
+  margin: 14px 0;
+  padding: 12px 18px;
+  background: #f8fafc;
+  border-left: 4px solid #64748b;
+  color: #334155;
+  font-style: normal;
+  border-radius: 0 6px 6px 0;
+}
+
+blockquote p {
+  margin: 0;
+}
+
+/* 수평선 */
+hr {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 32px 0;
+}
+
+/* 테이블 */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0 18px 0;
+  font-size: 9.5pt;
+  page-break-inside: avoid;
+}
+
+th {
+  background: #0f172a;
+  color: #ffffff;
+  font-weight: 600;
+  padding: 9px 12px;
+  text-align: left;
+  border: 1px solid #0f172a;
+  letter-spacing: -0.005em;
+}
+
+td {
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  vertical-align: top;
+  line-height: 1.55;
+}
+
+tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+tr:hover td {
+  background: #eff6ff;
+}
+
+/* 코드 블록 */
+pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 14px 18px;
+  border-radius: 6px;
+  font-family: "SF Mono", "Menlo", "Monaco", "Consolas", monospace;
+  font-size: 9pt;
+  line-height: 1.55;
+  overflow-x: auto;
+  margin: 12px 0;
+  page-break-inside: avoid;
+}
+
+pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: inherit;
+}
+
+code {
+  background: #f1f5f9;
+  color: #be185d;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: "SF Mono", "Menlo", "Monaco", "Consolas", monospace;
+  font-size: 9.5pt;
+  font-weight: 500;
+}
+
+/* 문서 헤더 메타 정보 */
+h1 + p {
+  margin-bottom: 20px;
+}
+
+/* 문서 시작부 메타 정보 (문서 버전 등) */
+hr + p strong {
+  color: #64748b;
+  font-weight: 500;
+  display: inline-block;
+  min-width: 78px;
+}
+
+/* Executive Summary 섹션 강조 */
+h2:first-of-type + p {
+  font-size: 11pt;
+  color: #1f2937;
+  background: #fafbfc;
+  padding: 16px 20px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  margin: 10px 0;
+}
+
+/* 페이지 브레이크 제어 */
+h2 {
+  page-break-before: auto;
+}
+
+table, pre, blockquote {
+  page-break-inside: avoid;
+}
+
+/* 마지막 문서 표식 */
+hr + p em {
+  display: block;
+  font-size: 9pt;
+  color: #94a3b8;
+  text-align: center;
+  margin-top: 16px;
+  font-style: italic;
+}
