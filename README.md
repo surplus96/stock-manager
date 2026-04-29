@@ -1,96 +1,143 @@
-# Stock Manager — AI Portfolio Analyst
+# Stock Manager
 
-**Demo**: <!-- DEMO_URL --> _(배포 후 갱신 예정)_
+> An AI-powered stock analysis dashboard for the Korean and U.S. markets — chat with a Gemini-backed analyst, generate streaming research reports, rank candidates, and inspect single tickers, all from one browser tab.
+
+**Live demo**: <!-- DEMO_URL --> _(updated after deployment)_
 **License**: [MIT](LICENSE) · **Third-party notices**: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
-> 한국·미국 주식을 자연어로 분석·랭킹·리포팅해 주는 AI 포트폴리오 매니저.
-> Next.js 대시보드 + FastAPI 백엔드 + Gemini LLM + MCP 툴 레지스트리 통합.
+---
+
+## For Reviewers
+
+- The deployed demo URL is public and self-contained — open it in a browser and every feature works without further setup.
+- **No API key entry is required.** All external services (Google Gemini, DART OPEN API, KRX, Yahoo Finance) are called from the backend using server-side environment variables. The frontend only talks to our own backend.
+- The demo URL is kept online for the entire review window.
+- This repository is MIT-licensed. Every dependency, font, and icon is listed with its upstream license in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). All bundled charts and report assets are generated programmatically from public market data — no third-party copyrighted artwork is included.
 
 ---
 
-## For Reviewers (심사자용)
+## What it does
 
-- **공개 데모 URL** 한 곳만 열어서 모든 기능을 그대로 체험할 수 있습니다.
-- **별도의 API 키 입력은 필요 없습니다.** 외부 API(Google Gemini, DART, KRX, yfinance)는 모두 서버사이드 환경변수로 호출되며, 프론트엔드는 자체 백엔드만 호출합니다.
-- 심사 기간 동안 데모 URL이 살아있도록 유지합니다.
-- 라이선스/저작권: 본 저장소는 [MIT](LICENSE) 라이선스이며, 사용된 모든 의존성·폰트·아이콘의 라이선스 출처는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에 정리되어 있습니다. 이미지·차트 자산은 모두 공개 데이터로 코드가 직접 생성한 것이며 외부 저작물 도용은 없습니다.
+A reviewer landing on the dashboard can:
 
----
+| Page | Purpose |
+|---|---|
+| **`/` (Home)** | Market overview cards (KOSPI / S&P 500 / sector heat) and quick-jump actions. |
+| **`/chat`** | Streaming chat with a Gemini-backed analyst. Tool-augmented: the assistant can pull prices, news, filings, fundamentals, and rankings on demand and render rich blocks (tables, charts, ticker pills, follow-up suggestions) inline. SSE-streamed responses with stop-button support. |
+| **`/stock/[ticker]`** | Single-ticker deep dive — price chart, technical indicators (SMA / EMA / RSI / MACD / Bollinger / ADX), fundamentals snapshot, recent news. Works for both U.S. tickers (`AAPL`) and Korean codes (`005930`). |
+| **`/ranking`** | Multi-factor ranking across a candidate set — fundamentals, momentum, sentiment composite. Triggers a streaming analysis report when a candidate is opened. |
+| **`/theme`** | Theme exploration — propose tickers from a natural-language theme, then run cross-ticker comparisons. |
+| **`/portfolio`** | Holdings evaluation — sector allocation, dividend yield, correlation matrix, phase signals (uptrend / hold / unstable / red-flag). |
 
-## 개요
-MCP 서버 기반 펀드 매니저 에이전트. 뉴스·재무·공시 데이터를 수집/요약/지식화하고, 후보군 랭킹과 리포트를 생성합니다. 웹 대시보드(채팅 + 분석 리포트)와 Claude 호스트앱(MCP) 양쪽에서 동일한 백엔드 도구를 호출합니다.
-- 타겟: 한국·미국 주식 (3-tier 한국 코드 분류, KOSPI/KOSDAQ 자동 판별)
-- 인터페이스: 웹 대시보드 (Next.js 16) · Claude 호스트앱 (MCP 연동)
-
-### 주요 프로세스
-- 신규 투자 진행 프로세스:
-  1. 전반적 시장/섹터/기업 동향 파악
-  2. 사용자에게 종목 카테고리 추천
-  3. 사용자 지정 종목·테마 정밀 파악
-  4. 후보 기업/종목 리스트업 및 데이터 수집
-  5. 분석·평가·랭킹 및 리포트 작성(예상 이익률·근거)
-  6. 옵시디언으로 문서화·시각화·지식 그래프 활용
-- 보유 종목 진단/알림 프로세스:
-  1. 보유 종목 진단 및 페이즈(상승/유지/불안정/적신호) 알림
-  2. 적신호 단계 시 정밀 분석 및 대응 제안
-
-### 아키텍처 요약
-- Claude 호스트앱 + MCP 서버(도구 제공)
-- 데이터 소스:
-  - 뉴스/동향: Perplexity MCP
-  - 시세/재무: yfinance(우선), Alpha Vantage/Finnhub/Polygon.io(확장)
-  - 공시/실적: SEC EDGAR API
-- 분석/랭킹: 팩터 + 이벤트/모멘텀/리스크 스코어
-- 스토리지: SQLite 캐시/운영, 옵시디언 Markdown, (선택) Neo4j
-- 스케줄링: APScheduler (데일리/주간 잡)
-
-### 사용 라이브러리
-- 핵심: fastapi(선택), pydantic, requests, pandas, numpy, yfinance, python-dateutil, APScheduler, jinja2, diskcache, tqdm
-- 선택: alpha_vantage, sec-api 또는 직접 EDGAR, ta, vectorbt, neo4j(옵션), langchain-core, pyyaml, markdownify
-
-### 핵심 MCP 도구(엔드포인트)
-- market_data.get_prices(ticker, start, end, interval)
-- market_data.get_fundamentals(ticker)
-- news.search(query|tickers, lookback)
-- filings.fetch(ticker, form, lookback)
-- analytics.rank(candidates, criteria?)
-- portfolio.evaluate(holdings)
-- reports.generate(type, payload)
-- obsidian.write(note_path, content, links)
-
-### Claude 자연어 예시 프롬프트
-- 테마 리포트: "AI 테마 주간 리포트 만들어줘. 티커는 AAPL, MSFT, NVDA 사용해."
-  - 내부 호출: `create_theme_report(theme='AI', tickers_csv='AAPL,MSFT,NVDA')`
-- 포트폴리오 페이즈: "내 보유종목 AAPL, MSFT, NVDA의 페이즈 리포트 만들어줘."
-  - 내부 호출: `create_portfolio_phase_report(tickers_csv='AAPL,MSFT,NVDA')`
-- 뉴스: "최근 일주일 AI 칩과 클라우드 성장 관련 뉴스 5개만 요약해줘."
-  - 내부 호출: `news_search(queries=['AI chips','cloud growth'], lookback_days=7, max_results=5)`
-- 공시: "AAPL의 최근 10-Q/8-K 3건 보여줘."
-  - 내부 호출: `filings_fetch_recent(ticker='AAPL', forms=['10-Q','8-K'], limit=3)`
+The same backend tools also expose an MCP (Model Context Protocol) server, so anyone running Claude Desktop or another MCP host can call them directly from their own client.
 
 ---
 
-## 로컬 실행
+## Architecture
+
+```
+┌─────────────────────────────────────┐
+│  Next.js 16 dashboard (Turbopack)   │  ← Vercel
+│  · App Router pages                  │
+│  · SSE chat client + ReadableStream  │
+│  · framer-motion + Tailwind tokens   │
+└────────────────┬────────────────────┘
+                 │ REST + SSE (NEXT_PUBLIC_API_URL)
+                 ▼
+┌─────────────────────────────────────┐
+│  FastAPI backend                    │  ← Hugging Face Spaces (Docker)
+│  · /api/chat/stream (SSE)            │
+│  · /api/technical/* /finnhub/*       │
+│  · /api/ranking/analysis-report      │
+│  · slowapi rate-limit + CORS         │
+│  · diskcache + circuit breakers      │
+└────────────────┬────────────────────┘
+                 │
+   ┌─────────────┼─────────────┬──────────────┐
+   ▼             ▼             ▼              ▼
+ Gemini API   yfinance /    DART OPEN API   PyKrx /
+ (LLM)        Finnhub /     (KR filings &   FinanceData-
+              SEC EDGAR     fundamentals)   Reader (KR)
+```
+
+### Tech stack
+
+- **Frontend**: Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS, framer-motion, recharts, react-markdown, lucide-react. Source Serif 4 via `next/font/google`.
+- **Backend**: FastAPI, Uvicorn, Pydantic v2, SlowAPI, Tenacity (retry + circuit breaker), Diskcache, APScheduler, Jinja2.
+- **LLM**: Google Gemini (`gemini-2.5-flash` default, with a resilient fallback chain through `gemini-2.0-flash` / `gemini-2.0-flash-lite` / `gemini-2.5-flash-lite`). Streaming via the `streamGenerateContent` REST endpoint. UTF-8 forced on responses for Korean output.
+- **MCP**: `fastmcp` server exposing 39 tools — the same tool surface the web chat orchestrator uses.
+- **Markets**:
+  - Korea — `pykrx`, `finance-datareader`, `OpenDartReader`, plus a 3-tier KOSPI/KOSDAQ classifier (seed JSON → live yfinance probe → `.KS` fallback) so 6-digit codes resolve to the right Yahoo suffix automatically.
+  - U.S. — `yfinance` (price + fundamentals), optional Finnhub (analyst/insider/earnings) and SEC EDGAR (filings).
+
+### Project layout
+
+```
+api/                FastAPI app (server.py) + chat orchestration services
+mcp_server/         FastMCP tools + market-data adapters (yfinance, PyKrx, DART)
+core/               Cross-cutting config, schemas, resilience helpers
+dashboard/          Next.js 16 frontend (App Router under src/app)
+docs/               Architecture notes + archived PDCA cycles
+tests/              Pytest suite (~70 tests covering tools, KR market, server bootstrap)
+Dockerfile          Backend container (Hugging Face Spaces / any Docker host)
+```
+
+---
+
+## Running locally
+
+Prereqs: Python 3.11+, Node 20+, a free [Google AI Studio key](https://aistudio.google.com/apikey).
 
 ```bash
-# 1. 환경 변수 설정
+# 1. Configure environment
 cp .env.example .env
-#   GEMINI_API_KEY (https://aistudio.google.com/apikey) 만 채워 넣으면 기본 동작
+# Set GEMINI_API_KEY at minimum. DART/Finnhub keys are optional (graceful fallback).
 
-# 2. 백엔드 (FastAPI, http://localhost:8000)
+# 2. Backend — FastAPI on :8000
 pip install -r requirements.txt
 uvicorn api.server:app --reload
 
-# 3. 프론트엔드 (Next.js 16, http://localhost:3000)
+# 3. Frontend — Next.js 16 on :3000
 cd dashboard
 npm install
 npm run dev
 ```
 
-## 라이선스 / 저작권
+Visit http://localhost:3000 — the chat at `/chat` is the fastest way to see the whole pipeline in action (try `삼성전자 005930 종합 분석` or `AAPL deep dive`).
 
-- 본 저장소 코드: [MIT License](LICENSE)
-- 의존성 라이선스 전체 목록: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
-- 폰트: Source Serif 4 (SIL Open Font License 1.1)
-- 아이콘: lucide-react (ISC)
-- 외부 데이터: Google Gemini, DART, KRX, Yahoo Finance — 각 서비스 약관 준수, 비상업적 연구 목적
+### Run the tests
+
+```bash
+pytest -q
+```
+
+### Optional: use as an MCP server in Claude Desktop or any MCP host
+
+```bash
+python -m mcp_server.mcp_app   # stdio MCP transport
+```
+
+See `mcp_config.sample.json` for a Claude Desktop config snippet.
+
+---
+
+## Deployment
+
+The repository is wired for a two-platform free-tier deployment:
+
+- **Backend** → Hugging Face Spaces (Docker SDK). The included `Dockerfile` is HF-Spaces compatible (port 7860, `/tmp` writable for `diskcache` / matplotlib). All API keys are set as Space **Secrets**; non-sensitive config (`ALLOWED_ORIGINS`, `CHAT_MODEL`) goes in **Variables**.
+- **Frontend** → Vercel. Set the project's **Root Directory** to `dashboard/` and add `NEXT_PUBLIC_API_URL` pointing at the Space URL.
+
+Both tiers are free and require no credit card.
+
+---
+
+## License & attribution
+
+- Code: [MIT License](LICENSE) — © 2025 Taeyoung Choi
+- Dependency licenses (per package): [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+- Font: Source Serif 4 — SIL Open Font License 1.1
+- Icons: lucide-react — ISC
+- External data services: Google Gemini, Yahoo Finance, KRX, DART OPEN API, Finnhub (optional), SEC EDGAR (optional). Used in accordance with each provider's terms for non-commercial research; no scraped content is redistributed.
+
+No third-party copyrighted images, illustrations, or stock media are bundled in this repository. Every chart and report image is generated at runtime from public market data by code in this repo.
