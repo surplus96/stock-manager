@@ -8,18 +8,31 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 
 try:
-    from pydantic import Field
+    from pydantic import Field, field_validator
     from pydantic_settings import BaseSettings, SettingsConfigDict
+    try:
+        from pydantic_settings import NoDecode  # 2.2+
+    except ImportError:
+        NoDecode = None  # type: ignore[assignment]
     _HAS_PYDANTIC_SETTINGS = True
 except ImportError:  # pragma: no cover - fallback for environments without pydantic-settings
     _HAS_PYDANTIC_SETTINGS = False
 
 
 if _HAS_PYDANTIC_SETTINGS:
+
+    # ``NoDecode`` keeps pydantic-settings from JSON-decoding the env
+    # value before our field_validator runs. Documented format is
+    # comma-separated, but EnvSettingsSource defaults to JSON for any
+    # ``list[str]`` field — boot crashes on HF Spaces without this.
+    _AllowedOrigins = (
+        Annotated[list[str], NoDecode] if NoDecode is not None else list[str]
+    )
+
 
     class Settings(BaseSettings):
         """Stock Manager backend settings loaded from env / .env."""
@@ -38,8 +51,9 @@ if _HAS_PYDANTIC_SETTINGS:
         )
         llm_timeout_sec: int = Field(default=300, ge=10, le=600)
 
-        # Security / networking
-        allowed_origins: list[str] = Field(
+        # Security / networking — see _AllowedOrigins above for why this
+        # is annotated rather than a plain ``list[str]``.
+        allowed_origins: _AllowedOrigins = Field(  # type: ignore[valid-type]
             default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"],
             description="CORS allow_origins (comma-separated in env)",
         )
@@ -69,11 +83,19 @@ if _HAS_PYDANTIC_SETTINGS:
             case_sensitive=False,
         )
 
+        @field_validator("allowed_origins", mode="before")
         @classmethod
-        def _parse_origins(cls, raw: str | list[str]) -> list[str]:
+        def _parse_origins(cls, raw):
+            # ``ALLOWED_ORIGINS`` is documented as a comma-separated string,
+            # but pydantic-settings defaults to JSON-decoding any env value
+            # bound to a ``list[str]`` field. Without this validator the
+            # process refuses to boot on Hugging Face Spaces whenever the
+            # operator follows the docs and writes ``a.com,b.com``.
+            if raw is None or raw == "":
+                return ["http://localhost:3000", "http://127.0.0.1:3000"]
             if isinstance(raw, list):
                 return raw
-            return [o.strip() for o in raw.split(",") if o.strip()]
+            return [o.strip() for o in str(raw).split(",") if o.strip()]
 
 else:  # Minimal stdlib fallback so server can still boot without pydantic-settings
 
