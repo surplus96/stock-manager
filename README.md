@@ -7,15 +7,6 @@
 
 ---
 
-## For Reviewers
-
-- The deployed demo URL is public and self-contained — open it in a browser and every feature works without further setup.
-- **No API key entry is required.** All external services (Google Gemini, DART OPEN API, KRX, Yahoo Finance) are called from the backend using server-side environment variables. The frontend only talks to our own backend.
-- The demo URL is kept online for the entire review window.
-- This repository is MIT-licensed. Every dependency, font, and icon is listed with its upstream license in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). All bundled charts and report assets are generated programmatically from public market data — no third-party copyrighted artwork is included.
-
----
-
 ## What it does
 
 A reviewer landing on the dashboard can:
