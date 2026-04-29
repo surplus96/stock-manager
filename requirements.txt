@@ -27,7 +27,7 @@ fastmcp>=0.4.2
 # --- Korean market (PyKrx / FinanceDataReader / DART OPEN API) ---
 pykrx>=1.0.45
 finance-datareader>=0.9.94
-OpenDartReader>=0.2.4
+OpenDartReader>=0.2.0
 
 # --- Optional providers (uncomment if needed) ---
 # alpha_vantage>=2.3
