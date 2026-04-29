@@ -59,3 +59,7 @@ _site/
 # counterproductive to check this file into the repository.
 # Details at https://github.com/github/pages-gem/issues/768
 Gemfile.lock
+
+# Obsidian vault — runtime artifacts, not part of source
+obsidian_vault/
+obsidian_vault*
