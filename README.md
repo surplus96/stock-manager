@@ -2,7 +2,8 @@
 
 > An AI-powered stock analysis dashboard for the Korean and U.S. markets — chat with a Gemini-backed analyst, generate streaming research reports, rank candidates, and inspect single tickers, all from one browser tab.
 
-**Live demo**: <!-- DEMO_URL --> _(updated after deployment)_
+**Live demo**: https://stock-manager-two-eta.vercel.app
+**Backend (HF Spaces)**: https://surplus96-stock-manager-api.hf.space · `/api/health` · `/docs`
 **License**: [MIT](LICENSE) · **Third-party notices**: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 ---
