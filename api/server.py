@@ -279,6 +279,43 @@ def api_circuit_status():
     return get_all_circuit_status()
 
 
+@app.get("/api/diag/kis", tags=["health"])
+def api_diag_kis():
+    """Tiny diagnostic for KIS Developers credentials.
+
+    Reports whether the env vars are visible to the running process and
+    whether a real OAuth token can be minted — without ever echoing the
+    secret values themselves. Lets us tell "key missing" apart from
+    "key set but rejected by KIS" from "production endpoint working".
+    """
+    from mcp_server.tools import kis_client
+
+    key = (os.getenv("KIS_APP_KEY") or "").strip()
+    secret = (os.getenv("KIS_APP_SECRET") or "").strip()
+    info = {
+        "configured": kis_client.is_configured(),
+        "key_present": bool(key),
+        "key_length": len(key),
+        "secret_present": bool(secret),
+        "secret_length": len(secret),
+        "endpoint": kis_client.KIS_BASE_URL,
+    }
+    if not info["configured"]:
+        info["next_step"] = "Set KIS_APP_KEY and KIS_APP_SECRET as HF Space Secrets."
+        return info
+
+    token = kis_client.get_access_token()
+    info["token_minted"] = bool(token)
+    info["token_length"] = len(token) if token else 0
+    if not token:
+        info["next_step"] = (
+            "Token mint failed. Likely causes: (1) keys are for paper-trading "
+            "(VTS) but we're hitting production, (2) keys are revoked, "
+            "(3) KIS daily token quota exhausted."
+        )
+    return info
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
