@@ -22,7 +22,9 @@ plotly>=5.22
 tenacity>=8.5
 
 # --- Technical indicators + sentiment (re-enables RSI/MACD/news mood) ---
-pandas-ta>=0.3.14b0
+# bukosabino's ``ta`` (NOT pandas-ta) — what mcp_server/tools/technical_indicators.py
+# actually imports. Stable PyPI release, no --pre flag needed.
+ta>=0.11.0
 vaderSentiment>=3.3.2
 
 # --- MCP server ---
