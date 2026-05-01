@@ -16,27 +16,30 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { Cpu, ChevronDown } from "lucide-react";
 
 // FR-PSP-M02 — ``tone`` decorates the segmented buttons with a small
-// dot in family-specific colours (Flash = teal, Lite = slate). Helps
-// users recognise the family at a glance without reading the label.
+// dot in family-specific colours (Preview = violet, Flash = teal,
+// Lite = slate). Helps users recognise the family at a glance without
+// reading the label.
 //
 // Lineup verified against the live /v1beta/models/{name} endpoint on
-// 2026-04-23 — the ``gemini-1.5-flash-latest`` and ``gemini-1.5-pro``
-// names that the previous build advertised both 404 on this API tier
-// and were dropped to avoid an immediate fallback round-trip.
+// 2026-05-01 — ``gemini-3.1-flash-lite-preview`` now returns 200 on
+// this API tier and was promoted to the default. 2.5-flash drops one
+// slot and stays as the highest-quality non-preview alternative.
 const MODELS = [
-  { value: "gemini-2.5-flash", short: "2.5", label: "Flash 2.5 (권장, 최신)", tone: "flash" },
-  { value: "gemini-2.0-flash", short: "2.0", label: "Flash 2.0 (안정)", tone: "flash" },
-  { value: "gemini-2.5-flash-lite", short: "Lite", label: "Flash 2.5 Lite (빠름)", tone: "lite" },
+  { value: "gemini-3.1-flash-lite-preview", short: "3.1", label: "Flash Lite 3.1 (권장, preview)", tone: "preview" },
+  { value: "gemini-2.5-flash", short: "2.5", label: "Flash 2.5 (안정)", tone: "flash" },
+  { value: "gemini-2.0-flash", short: "2.0", label: "Flash 2.0 (저비용)", tone: "flash" },
 ] as const;
 
-const TONE_DOT: Record<"flash" | "lite", string> = {
-  flash: "var(--chart-pos)",      // teal — main Flash family
-  lite:  "var(--chart-neutral)",  // slate — Lite variants
+const TONE_DOT: Record<"preview" | "flash" | "lite", string> = {
+  preview: "var(--accent)",        // violet — preview family
+  flash:   "var(--chart-pos)",     // teal — main Flash family
+  lite:    "var(--chart-neutral)", // slate — Lite variants
 };
 
 // FR-PSP-M01 — top 3 stay in the segmented control, the rest fall into a
 // "More" overflow popover so the visible UI stays compact.
 const MORE_MODELS = [
+  { value: "gemini-2.5-flash-lite", label: "Flash 2.5 Lite" },
   { value: "gemini-2.0-flash-lite", label: "Flash 2.0 Lite" },
 ];
 

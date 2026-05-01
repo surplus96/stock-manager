@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 # Google AI Studio (Gemma 4) — FR-B02: API key via header, FR-B14: GEMINI_MODEL naming
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 # Prefer canonical GEMINI_MODEL; fall back to legacy GEMMA_MODEL for backward compatibility
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", os.getenv("GEMMA_MODEL", "gemma-4-26b-a4b-it"))
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", os.getenv("GEMMA_MODEL", "gemini-3.1-flash-lite-preview"))
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 

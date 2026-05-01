@@ -63,13 +63,13 @@ if _HAS_PYDANTIC_SETTINGS:
         rate_limit_analysis_per_min: int = Field(default=10, ge=1)
 
         # Chat-bot + analysis-report shared model (FR-P01).
-        # 2026-04-23: rolled back to ``gemini-2.5-flash`` after live probe
-        # confirmed ``gemini-3.0-flash`` returns 404 on the v1beta endpoint
-        # (model not GA on this API tier yet). Every chat call previously
-        # ate a wasted round-trip + ``not found, skipping`` log line before
-        # the resilient wrapper advanced to 2.5; pinning directly at 2.5
-        # removes that overhead and uses 2.0 only as a 503 fallback.
-        default_chat_model: str = Field(default="gemini-2.5-flash")
+        # 2026-05-01: bumped to ``gemini-3.1-flash-lite-preview`` after a
+        # live probe confirmed it returns 200 on this API tier (the same
+        # tier where 3.0-flash 404'd back in April). Lite-preview is the
+        # cheapest 3.x variant and answers chat-shaped prompts in ~1s
+        # cold; 2.5-flash / 2.0-flash stay in the fallback chain so
+        # quota/503 failures still degrade gracefully.
+        default_chat_model: str = Field(default="gemini-3.1-flash-lite-preview")
         chat_use_preview: bool = Field(default=False)
 
         # Ops
