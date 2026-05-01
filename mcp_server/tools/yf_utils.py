@@ -44,28 +44,39 @@ def normalize_yf_columns(df: pd.DataFrame) -> pd.DataFrame:
 def is_yfinance_supported(ticker: str, market: str = "US") -> bool:
     """False for KR special-listing codes Yahoo Finance doesn't index.
 
-    Background: Yahoo carries every KOSPI/KOSDAQ common stock under
-    its 6-digit numeric code suffixed with ``.KS`` / ``.KQ``. It does
-    *not* carry the alphanumeric KRX codes used for REITs, ETNs,
-    A-prefix stock-loan stubs, ELWs, etc. — anything with a letter
-    in the 6-char ticker (e.g. ``0001A0`` for 덕양에너젠). Calling
-    yfinance for those returns 5+ HTTP 404s before bailing out, which
-    floods the container logs and burns ~1s per call.
+    Pattern-based, not market-arg-based — ``market`` is accepted for
+    backwards compatibility but ignored. Empirically several callers
+    (stock_report.py among them) hard-code ``market="US"`` regardless
+    of the actual ticker, and ``yf_utils.detect_market`` itself can't
+    classify a 6-char alphanumeric like ``0001A0`` so it returns ``US``
+    too. Trusting either signal would let unsupported tickers slip
+    through and re-trigger the yfinance 404 cascade we're trying to
+    suppress, so the test runs purely on the ticker shape.
 
-    Use this guard at the top of any code path that's about to invoke
-    ``yfinance`` so the chain can short-circuit straight to KIS / DART /
-    PyKrx for the unsupported codes instead of paying the round-trip.
+    Pass-through cases (return True):
+        - Plain alpha (US): ``AAPL``, ``MSFT``, ``BRK.A``
+        - 6-digit numeric (KR common stock — wraps to ``.KS`` / ``.KQ``)
+        - Already-suffixed KR: ``005930.KS``, ``247540.KQ``
+
+    Short-circuit cases (return False):
+        - 6-char mixed alphanumeric KRX special listings (REIT, ETN,
+          A-prefix stock-loan, ELW): ``0001A0`` (덕양에너젠), ``A12345``
+        - Empty / None
     """
-    if (market or "US").strip().upper() != "KR":
-        return True
-    t = str(ticker or "").strip().upper().replace(".KS", "").replace(".KQ", "")
+    t = str(ticker or "").strip().upper()
     if not t:
         return False
-    # 6-digit numeric → maps cleanly to ``.KS`` / ``.KQ`` on Yahoo.
-    if t.isdigit() and len(t) == 6:
-        return True
-    # Anything else with KR market is a special listing yfinance can't help with.
-    return False
+    # Strip yfinance-style KR suffix before shape testing.
+    bare = t.replace(".KS", "").replace(".KQ", "")
+    if not bare:
+        return False
+    # 6-char ticker that mixes letters and digits = KRX special listing.
+    # ``isdigit() == False and isalpha() == False and isalnum() == True``
+    # is the precise mixed-class check; ``"AAPL"`` (5 alpha) and
+    # ``"005930"`` (6 digit) both pass through, ``"0001A0"`` does not.
+    if len(bare) == 6 and bare.isalnum() and not bare.isdigit() and not bare.isalpha():
+        return False
+    return True
 
 
 def normalize_ticker_multi_market(ticker: str, market: str = "US") -> str:
