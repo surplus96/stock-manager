@@ -16,6 +16,21 @@ from mcp_server.tools.yf_utils import detect_market, normalize_yf_columns
 logger = logging.getLogger(__name__)
 
 
+def _yf_symbol(ticker: str) -> str:
+    """Map a Korean 6-digit code (or .KS/.KQ) to its Yahoo-suffixed form.
+
+    Yahoo Finance returns 404 for bare KR codes like ``005930`` — they
+    must carry ``.KS`` (KOSPI) or ``.KQ`` (KOSDAQ). Without this shim
+    every KR call burnt a yfinance round-trip + ``possibly delisted``
+    warning before falling back to PyKrx/DART. US tickers pass through
+    unchanged.
+    """
+    if detect_market(ticker) == "KR":
+        from mcp_server.tools.kr_market_lookup import kr_yfinance_symbol
+        return kr_yfinance_symbol(ticker)
+    return ticker
+
+
 @retry_with_backoff(
     attempts=RetryConfig.YFINANCE["attempts"],
     min_wait=RetryConfig.YFINANCE["min_wait"],
@@ -60,7 +75,10 @@ def get_prices(ticker: str, start: Optional[str] = None, end: Optional[str] = No
             # intentional fall-through to yfinance
 
     try:
-        data = _download_prices(ticker, start, end, interval)
+        # KR ticker fall-through (PyKrx empty / failed): hit Yahoo with
+        # the ``.KS`` / ``.KQ`` suffixed form so we don't 404 on bare
+        # 6-digit codes.
+        data = _download_prices(_yf_symbol(ticker), start, end, interval)
         return data.reset_index()
     except CircuitOpenError:
         logger.warning(f"yfinance circuit open for {ticker}, returning empty DataFrame")
@@ -155,10 +173,11 @@ def get_fundamentals_snapshot(ticker: str) -> dict:
 @cached(ttl=TTL.DAILY, prefix="momentum")
 def get_momentum_metrics(ticker: str) -> dict:
     """안정적 모멘텀 계산 (4시간 캐시, 서킷 브레이커 적용): yfinance download 실패 시 Ticker().history로 폴백."""
+    yf_sym = _yf_symbol(ticker)
     hist = None
     try:
         def _download():
-            return yf.download(ticker, period="1y", interval="1d", progress=False, auto_adjust=True)
+            return yf.download(yf_sym, period="1y", interval="1d", progress=False, auto_adjust=True)
         hist = normalize_yf_columns(circuit_yfinance.call(_download))
     except CircuitOpenError:
         logger.warning(f"yfinance circuit open for momentum: {ticker}")
@@ -169,7 +188,7 @@ def get_momentum_metrics(ticker: str) -> dict:
     if hist is None or hist.empty:
         try:
             def _history():
-                tk = yf.Ticker(ticker)
+                tk = yf.Ticker(yf_sym)
                 return tk.history(period="1y", interval="1d", auto_adjust=True)
             hist = normalize_yf_columns(circuit_yfinance.call(_history))
         except CircuitOpenError:
@@ -205,7 +224,7 @@ def get_prices_paginated(ticker: str, start: Optional[str], end: Optional[str], 
 def get_prices_summary(ticker: str, period: str = "1y", interval: str = "1d", agg: str = "W") -> dict:
     """가격 요약 조회 (4시간 캐시)"""
     hist = normalize_yf_columns(
-        yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
+        yf.download(_yf_symbol(ticker), period=period, interval=interval, progress=False, auto_adjust=True)
     )
     if hist.empty:
         return {"ticker": ticker, "count": 0}

@@ -21,6 +21,10 @@ matplotlib>=3.9
 plotly>=5.22
 tenacity>=8.5
 
+# --- Technical indicators + sentiment (re-enables RSI/MACD/news mood) ---
+pandas-ta>=0.3.14b0
+vaderSentiment>=3.3.2
+
 # --- MCP server ---
 fastmcp>=0.4.2
 
