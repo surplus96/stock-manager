@@ -147,4 +147,13 @@ def detect_market(ticker: str) -> str:
         return "KR"
     if t.isdigit() and len(t) == 6:
         return "KR"
+    # 6-char alphanumeric mixing letters and digits → KRX special
+    # listing (REIT/ETN/A-prefix stock-loan/ELW), e.g. ``0001A0`` for
+    # 덕양에너젠. US tickers are pure alpha (``AAPL``) or alpha + dot
+    # (``BRK.A``) and never reach 6 chars by mixing classes, so this is
+    # an unambiguous KR signal. Without this branch the whole KR routing
+    # chain (KIS/PyKrx/DART) gets bypassed and the frontend shows N/A
+    # everywhere because data goes to yfinance under "US".
+    if len(t) == 6 and t.isalnum() and not t.isalpha():
+        return "KR"
     return "US"
