@@ -53,8 +53,12 @@ class KoreanMarketAdapter:
 
         try:
             import FinanceDataReader as fdr
-            df = fdr.StockListing(market)
-            logger.info(f"Retrieved {len(df)} stocks from {market}")
+            # FDR doesn't accept ``"ALL"`` — it expects a real market name.
+            # Map ``ALL`` to the umbrella ``"KRX"`` so callers using the
+            # legacy keyword keep working without a noisy log line.
+            fdr_market = "KRX" if market.upper() == "ALL" else market
+            df = fdr.StockListing(fdr_market)
+            logger.info(f"Retrieved {len(df)} stocks from {fdr_market}")
             return df
         except Exception as e:
             logger.error(f"Failed to get stock listing for {market}: {e}")

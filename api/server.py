@@ -43,12 +43,23 @@ configure_logging(settings.log_level)
 logger = get_logger(__name__)
 
 # Silence pykrx's noisy "Logging error … not all arguments converted" stack
-# traces. Upstream logs ``logging.info(args, kwargs)`` which crashes the %s
-# formatter; the message itself is harmless ("Expecting value: line 1 …"
-# from a transient KRX API hiccup) and we already handle the empty-frame
-# return value gracefully in ``kr_market_data``.
+# traces. Upstream calls ``logging.info(args, kwargs)`` at the *module*
+# level (pykrx/website/comm/util.py:19) — that goes through the ROOT logger,
+# not ``pykrx.*``, so a level bump on the named logger does nothing. We
+# install a path-based filter on root that drops any record originating
+# from that exact file. The underlying KRX hiccup ("Expecting value …") is
+# handled gracefully downstream by kr_market_data's empty-frame fallback.
 logging.getLogger("pykrx").setLevel(logging.WARNING)
 logging.getLogger("pykrx.website").setLevel(logging.WARNING)
+
+
+class _DropPyKrxLoggingBug(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        path = getattr(record, "pathname", "") or ""
+        return "pykrx/website/comm/util.py" not in path
+
+
+logging.getLogger().addFilter(_DropPyKrxLoggingBug())
 
 # FR-B04: Rate limiting via slowapi (optional dependency — graceful degradation)
 try:

@@ -124,6 +124,45 @@ def _build_index_from_pykrx() -> dict[str, str]:
     return result
 
 
+def _build_index_from_fdr() -> dict[str, str]:
+    """Fallback name→code index via FinanceDataReader.
+
+    Cloud egress IPs (e.g. Hugging Face Spaces) are reliably blocked by
+    the KRX endpoints PyKrx scrapes, so the primary path returns 0
+    entries on that host. FDR hits a different upstream that those
+    blocks miss, so it stands in as a self-healing alternative.
+    """
+    try:
+        import FinanceDataReader as fdr
+    except ImportError:
+        logger.warning("FinanceDataReader not available — KR name resolution may be limited.")
+        return {}
+    try:
+        df = fdr.StockListing("KRX")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("FDR StockListing('KRX') failed: %s", e)
+        return {}
+    if df is None or df.empty:
+        return {}
+    code_col = next((c for c in ("Code", "Symbol") if c in df.columns), None)
+    name_col = next((c for c in ("Name", "Korean", "한글명") if c in df.columns), None)
+    if not code_col or not name_col:
+        logger.warning("FDR listing missing expected columns; got %s", list(df.columns))
+        return {}
+    out: dict[str, str] = {}
+    for code, name in zip(df[code_col].astype(str), df[name_col].astype(str)):
+        code = code.strip().upper()
+        name = name.strip()
+        # KRX uses 6-char codes that are usually all-digit (regular common
+        # stock) but can contain letters for special listings — REITs,
+        # KONEX, ETN, A-prefixed stock-loan codes, etc. ``덕양에너젠`` for
+        # example is ``0001A0``. Accept any 6-char alphanumeric.
+        if name and len(code) == 6 and code.isalnum():
+            out[name] = code
+    logger.info("KR ticker-name index (FDR fallback) built: %d entries.", len(out))
+    return out
+
+
 def _get_cached_index() -> dict[str, str]:
     """Lazy-build the full pykrx index and cache in the shared cache_manager."""
     key = "kr_ticker_name_index_v1"
@@ -136,8 +175,13 @@ def _get_cached_index() -> dict[str, str]:
         if isinstance(cached, dict) and cached:
             return cached
         idx = _build_index_from_pykrx()
+        # PyKrx commonly returns empty on cloud-egress hosts (KRX bot
+        # block); fall through to FDR before giving up so deployed
+        # instances still resolve Korean company names.
+        if not idx:
+            idx = _build_index_from_fdr()
         # Merge seed → ensures well-known names always resolve even if
-        # pykrx build returned empty.
+        # both upstreams returned empty.
         merged = {**_SEED_NAME_TO_CODE, **idx}
         cache_manager.set(key, merged, ttl=TTL.DAILY)
         return merged
