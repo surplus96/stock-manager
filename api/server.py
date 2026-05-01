@@ -313,6 +313,46 @@ def api_diag_kis():
             "(VTS) but we're hitting production, (2) keys are revoked, "
             "(3) KIS daily token quota exhausted."
         )
+        return info
+
+    # Token works — now probe an actual OHLCV call so we can tell apart
+    # "token OK but quote rejected" (most often an IP-whitelist miss on
+    # the KIS app config) from "everything works end-to-end".
+    probe = kis_client.request(
+        "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+        tr_id="FHKST03010100",
+        params={
+            "FID_COND_MRKT_DIV_CODE": "J",
+            "FID_INPUT_ISCD": "005930",  # Samsung — guaranteed to exist
+            "FID_INPUT_DATE_1": "20260401",
+            "FID_INPUT_DATE_2": "20260430",
+            "FID_PERIOD_DIV_CODE": "D",
+            "FID_ORG_ADJ_PRC": "1",
+        },
+    )
+    if not probe:
+        info["probe_005930"] = "request returned None (network / parse error)"
+        info["next_step"] = "Check container egress + KIS endpoint reachability."
+        return info
+
+    rt_cd = str(probe.get("rt_cd", "?"))
+    msg1 = (probe.get("msg1") or "").strip()
+    rows = len(probe.get("output2") or [])
+    info["probe_005930"] = {"rt_cd": rt_cd, "msg1": msg1, "row_count": rows}
+    if rt_cd == "0" and rows > 0:
+        info["next_step"] = "All green — KIS is callable end-to-end."
+    elif rt_cd != "0":
+        info["next_step"] = (
+            f"KIS rejected the OHLCV call (rt_cd={rt_cd}). Most likely the "
+            f"KIS app's IP whitelist excludes the Hugging Face Space cluster — "
+            f"add the egress IP at apiportal.koreainvestment.com → My App → "
+            f"IP settings, or set the IP field to allow-all."
+        )
+    else:
+        info["next_step"] = (
+            "rt_cd=0 but no rows returned — could be holiday/date range. "
+            "Try widening FID_INPUT_DATE_1/2."
+        )
     return info
 
 
