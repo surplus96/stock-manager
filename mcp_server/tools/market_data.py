@@ -118,11 +118,45 @@ def get_fundamentals_snapshot(ticker: str) -> dict:
     delisted`` warnings on every chat / report turn even when the DART
     path already populated the financial factors successfully.
     """
-    if detect_market(ticker) == "KR":
+    is_kr = detect_market(ticker) == "KR"
+    if is_kr:
         from mcp_server.tools.kr_market_lookup import kr_yfinance_symbol
         yf_symbol = kr_yfinance_symbol(ticker)
     else:
         yf_symbol = ticker
+
+    # KR seed via KIS — gives the Stock Analyzer page real numbers for
+    # KRX special listings (REIT/ETN/A-prefix stock-loan/ELW codes like
+    # ``0001A0``) that yfinance refuses to index. KIS quote returns
+    # last price / market cap / shares / PER / PBR / EPS / BPS in KRW;
+    # yfinance fields below overwrite anything KIS can't supply (sector
+    # / industry / cashflow), so the existing US path is unchanged.
+    kis_seed: dict = {}
+    if is_kr:
+        try:
+            from mcp_server.tools import kis_market_data as _kis
+            q = _kis.get_quote(ticker)
+            if q:
+                kis_seed = {
+                    "last_price": q.get("last_price"),
+                    "market_cap": q.get("market_cap"),
+                    "shares": q.get("shares_outstanding"),
+                    "currency": q.get("currency") or "KRW",
+                    "pe": q.get("per"),
+                    "pb": q.get("pbr"),
+                    "eps": q.get("eps"),
+                    "bps": q.get("bps"),
+                }
+        except Exception as e:  # noqa: BLE001
+            logger.debug("KIS quote seed failed for %s: %s", ticker, e)
+
+    # If yfinance can't help (KR special listing) skip the network round
+    # trip and just return whatever KIS gave us. The 5+ HTTP 404s would
+    # otherwise burn ~1s and re-introduce the log noise we just cleaned.
+    from mcp_server.tools.yf_utils import is_yfinance_supported
+    if not is_yfinance_supported(ticker):
+        return {"ticker": ticker, **{k: v for k, v in kis_seed.items() if v is not None}}
+
     try:
         def _fetch_info():
             tk = yf.Ticker(yf_symbol)
@@ -169,13 +203,22 @@ def get_fundamentals_snapshot(ticker: str) -> dict:
                 pass
             return out
 
-        return circuit_yfinance.call(_fetch_info)
+        result = circuit_yfinance.call(_fetch_info)
+        # Layer KIS seed under yfinance — yfinance fields win when both
+        # have a value (more granular fundamentals), KIS fills in the
+        # ones yfinance left as None for KR tickers.
+        for k, v in kis_seed.items():
+            if v is not None and result.get(k) in (None, "", 0, 0.0):
+                result[k] = v
+        return result
     except CircuitOpenError:
         logger.warning(f"yfinance circuit open for fundamentals: {ticker}")
-        return {"ticker": ticker, "error": "circuit_open"}
+        return {"ticker": ticker, "error": "circuit_open",
+                **{k: v for k, v in kis_seed.items() if v is not None}}
     except Exception as e:
         logger.warning(f"Failed to fetch fundamentals for {ticker}: {e}")
-        return {"ticker": ticker, "error": str(e)}
+        return {"ticker": ticker, "error": str(e),
+                **{k: v for k, v in kis_seed.items() if v is not None}}
 
 
 @cached(ttl=TTL.DAILY, prefix="momentum")
