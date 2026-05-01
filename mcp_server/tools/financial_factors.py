@@ -13,7 +13,7 @@ import numpy as np
 from typing import Dict, Optional
 import logging
 import yfinance as yf
-from .yf_utils import normalize_ticker_multi_market
+from .yf_utils import normalize_ticker_multi_market, is_yfinance_supported
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,13 @@ class FinancialFactors:
         try:
             # 티커 정규화
             normalized_ticker = normalize_ticker_multi_market(ticker, market)
+            # Skip yfinance for KR special listings (REIT/ETN/A-prefix
+            # alphanumeric codes) — Yahoo doesn't index them, so calling
+            # would burn 5+ HTTP 404s before bailing out. Returning the
+            # empty dict signals "no data here" so downstream sources
+            # (KIS / DART / PyKrx) take over cleanly.
+            if not is_yfinance_supported(ticker, market):
+                return {}
             stock = yf.Ticker(normalized_ticker)
             info = stock.info
 
@@ -129,6 +136,13 @@ class FinancialFactors:
         """
         try:
             normalized_ticker = normalize_ticker_multi_market(ticker, market)
+            # Skip yfinance for KR special listings (REIT/ETN/A-prefix
+            # alphanumeric codes) — Yahoo doesn't index them, so calling
+            # would burn 5+ HTTP 404s before bailing out. Returning the
+            # empty dict signals "no data here" so downstream sources
+            # (KIS / DART / PyKrx) take over cleanly.
+            if not is_yfinance_supported(ticker, market):
+                return {}
             stock = yf.Ticker(normalized_ticker)
             info = stock.info
             balance = stock.balance_sheet
@@ -205,6 +219,13 @@ class FinancialFactors:
         """
         try:
             normalized_ticker = normalize_ticker_multi_market(ticker, market)
+            # Skip yfinance for KR special listings (REIT/ETN/A-prefix
+            # alphanumeric codes) — Yahoo doesn't index them, so calling
+            # would burn 5+ HTTP 404s before bailing out. Returning the
+            # empty dict signals "no data here" so downstream sources
+            # (KIS / DART / PyKrx) take over cleanly.
+            if not is_yfinance_supported(ticker, market):
+                return {}
             stock = yf.Ticker(normalized_ticker)
             info = stock.info
             financials = stock.financials
@@ -316,6 +337,13 @@ class FinancialFactors:
         """
         try:
             normalized_ticker = normalize_ticker_multi_market(ticker, market)
+            # Skip yfinance for KR special listings (REIT/ETN/A-prefix
+            # alphanumeric codes) — Yahoo doesn't index them, so calling
+            # would burn 5+ HTTP 404s before bailing out. Returning the
+            # empty dict signals "no data here" so downstream sources
+            # (KIS / DART / PyKrx) take over cleanly.
+            if not is_yfinance_supported(ticker, market):
+                return {}
             stock = yf.Ticker(normalized_ticker)
             info = stock.info
 
@@ -374,6 +402,13 @@ class FinancialFactors:
         """
         try:
             normalized_ticker = normalize_ticker_multi_market(ticker, market)
+            # Skip yfinance for KR special listings (REIT/ETN/A-prefix
+            # alphanumeric codes) — Yahoo doesn't index them, so calling
+            # would burn 5+ HTTP 404s before bailing out. Returning the
+            # empty dict signals "no data here" so downstream sources
+            # (KIS / DART / PyKrx) take over cleanly.
+            if not is_yfinance_supported(ticker, market):
+                return {}
             stock = yf.Ticker(normalized_ticker)
             info = stock.info
             financials = stock.financials

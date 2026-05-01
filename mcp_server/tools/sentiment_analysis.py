@@ -13,7 +13,7 @@ from typing import Dict, List, Optional
 import logging
 import feedparser
 import yfinance as yf
-from .yf_utils import normalize_ticker_multi_market
+from .yf_utils import normalize_ticker_multi_market, is_yfinance_supported
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +135,8 @@ class SentimentFactors:
         # 실제 공시 파싱은 복잡하므로 추후 개선
         try:
             normalized_ticker = normalize_ticker_multi_market(ticker, market)
+            if not is_yfinance_supported(ticker, market):
+                return {}
             stock = yf.Ticker(normalized_ticker)
             info = stock.info
 
@@ -174,6 +176,8 @@ class SentimentFactors:
         """
         try:
             normalized_ticker = normalize_ticker_multi_market(ticker, market)
+            if not is_yfinance_supported(ticker, market):
+                return {}
             stock = yf.Ticker(normalized_ticker)
             info = stock.info
 
@@ -240,6 +244,8 @@ class SentimentFactors:
         """
         try:
             normalized_ticker = normalize_ticker_multi_market(ticker, market)
+            if not is_yfinance_supported(ticker, market):
+                return {}
             stock = yf.Ticker(normalized_ticker)
             info = stock.info
 

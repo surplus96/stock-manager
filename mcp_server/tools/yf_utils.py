@@ -41,6 +41,33 @@ def normalize_yf_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def is_yfinance_supported(ticker: str, market: str = "US") -> bool:
+    """False for KR special-listing codes Yahoo Finance doesn't index.
+
+    Background: Yahoo carries every KOSPI/KOSDAQ common stock under
+    its 6-digit numeric code suffixed with ``.KS`` / ``.KQ``. It does
+    *not* carry the alphanumeric KRX codes used for REITs, ETNs,
+    A-prefix stock-loan stubs, ELWs, etc. — anything with a letter
+    in the 6-char ticker (e.g. ``0001A0`` for 덕양에너젠). Calling
+    yfinance for those returns 5+ HTTP 404s before bailing out, which
+    floods the container logs and burns ~1s per call.
+
+    Use this guard at the top of any code path that's about to invoke
+    ``yfinance`` so the chain can short-circuit straight to KIS / DART /
+    PyKrx for the unsupported codes instead of paying the round-trip.
+    """
+    if (market or "US").strip().upper() != "KR":
+        return True
+    t = str(ticker or "").strip().upper().replace(".KS", "").replace(".KQ", "")
+    if not t:
+        return False
+    # 6-digit numeric → maps cleanly to ``.KS`` / ``.KQ`` on Yahoo.
+    if t.isdigit() and len(t) == 6:
+        return True
+    # Anything else with KR market is a special listing yfinance can't help with.
+    return False
+
+
 def normalize_ticker_multi_market(ticker: str, market: str = "US") -> str:
     """Normalize ticker symbol for multi-market yfinance lookup.
 
