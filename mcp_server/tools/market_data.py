@@ -56,23 +56,31 @@ def get_prices(ticker: str, start: Optional[str] = None, end: Optional[str] = No
     start = start or (datetime.now().replace(year=datetime.now().year - 1).strftime('%Y-%m-%d'))
     end = end or datetime.now().strftime('%Y-%m-%d')
 
-    # FR-K02: Korean tickers route through PyKrx; yfinance quality on KR
-    # names is known to drop ROE/other fundamentals, so the same adapter
-    # powers the fundamentals path elsewhere for consistency.
+    # FR-K02: Korean tickers route through PyKrx first; if PyKrx returns
+    # empty (KRX bot-blocks cloud-egress IPs like HF Spaces) we walk to
+    # KIS Developers, which uses OAuth2 over plain HTTPS and indexes
+    # every KRX security including special listings (REIT/ETN/A-prefix).
+    # yfinance is the final fallback with .KS/.KQ suffix applied below.
     if detect_market(ticker) == "KR":
         try:
             from mcp_server.tools.kr_market_data import get_kr_adapter
             df = get_kr_adapter().get_ohlcv(ticker, start=start, end=end)
-            if df is None or df.empty:
-                return pd.DataFrame()
-            # Reset any DatetimeIndex so downstream code can iterate rows
-            # with a "Date" column just like the yfinance path.
-            if df.index.name or df.index.dtype.kind == "M":
-                df = df.reset_index()
-            return df
+            if df is not None and not df.empty:
+                if df.index.name or df.index.dtype.kind == "M":
+                    df = df.reset_index()
+                return df
         except Exception as e:  # noqa: BLE001
-            logger.warning("KR price fetch failed for %s, falling back to yfinance: %s", ticker, e)
-            # intentional fall-through to yfinance
+            logger.warning("PyKrx fetch failed for %s, trying KIS: %s", ticker, e)
+
+        # KIS fall-through — handles common stock when PyKrx is blocked
+        # AND special listings PyKrx/yfinance don't index at all.
+        try:
+            from mcp_server.tools import kis_market_data as kis
+            df = kis.get_ohlcv(ticker, start=start, end=end)
+            if df is not None and not df.empty:
+                return df
+        except Exception as e:  # noqa: BLE001
+            logger.warning("KIS fetch failed for %s, falling back to yfinance: %s", ticker, e)
 
     try:
         # KR ticker fall-through (PyKrx empty / failed): hit Yahoo with

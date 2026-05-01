@@ -72,6 +72,14 @@ if _HAS_PYDANTIC_SETTINGS:
         default_chat_model: str = Field(default="gemini-3.1-flash-lite-preview")
         chat_use_preview: bool = Field(default=False)
 
+        # KIS Developers (한국투자증권) — third-tier KR market data.
+        # Sits behind PyKrx in the fall-through chain so cloud-egress
+        # hosts (HF Spaces) and KRX special listings (REIT/ETN/A-prefix
+        # codes like ``0001A0``) still resolve. Empty values disable
+        # the adapter cleanly — see mcp_server/tools/kis_client.py.
+        kis_app_key: str = Field(default="", description="KIS Developers app key")
+        kis_app_secret: str = Field(default="", description="KIS Developers app secret")
+
         # Ops
         log_level: str = Field(default="INFO")
         environment: Literal["dev", "staging", "prod"] = Field(default="dev")
