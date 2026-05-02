@@ -243,6 +243,51 @@ def api_factor_interpretation(ticker: str):
         from mcp_server.tools.financial_factors import FinancialFactors
         fin_factors = FinancialFactors.calculate_all(ticker, market)
         fin_interp = FinancialFactors.get_factor_interpretation(fin_factors)
+
+        # KR — augment with KIS valuation snapshot (PER/PBR/EPS/BPS/시가총액).
+        # The 20-factor calc only covers profitability/health/growth via
+        # yfinance/DART; KRX special listings (REIT/ETN/0001A0 etc) come
+        # back empty there even though KIS has solid valuation data, so
+        # this fills the Financial Analysis card with at least the basic
+        # market multiples instead of leaving it blank.
+        if market == "KR":
+            try:
+                from mcp_server.tools import kis_market_data as _kis
+                q = _kis.get_quote(ticker) or {}
+
+                def _per_label(v: float) -> str:
+                    if v <= 0: return f"적자 또는 PER 음수 ({v:.1f})"
+                    if v < 10: return f"저평가 구간 (PER {v:.1f})"
+                    if v < 20: return f"적정 평가 (PER {v:.1f})"
+                    if v < 40: return f"성장주 평가 (PER {v:.1f})"
+                    return f"고평가 (PER {v:.1f})"
+
+                def _pbr_label(v: float) -> str:
+                    if v <= 0: return f"PBR 산출 불가 ({v:.2f})"
+                    if v < 1: return f"청산가치 이하 (PBR {v:.2f})"
+                    if v < 2: return f"적정 (PBR {v:.2f})"
+                    if v < 4: return f"성장 프리미엄 (PBR {v:.2f})"
+                    return f"높은 평가 (PBR {v:.2f})"
+
+                if q.get("per") is not None:
+                    fin_factors["PER"] = q["per"]
+                    fin_interp["PER"] = _per_label(float(q["per"]))
+                if q.get("pbr") is not None:
+                    fin_factors["PBR"] = q["pbr"]
+                    fin_interp["PBR"] = _pbr_label(float(q["pbr"]))
+                if q.get("eps") is not None:
+                    fin_factors["EPS_KRW"] = q["eps"]
+                    fin_interp["EPS"] = f"주당순이익 {float(q['eps']):,.0f}원"
+                if q.get("bps") is not None:
+                    fin_factors["BPS_KRW"] = q["bps"]
+                    fin_interp["BPS"] = f"주당순자산 {float(q['bps']):,.0f}원"
+                if q.get("market_cap") is not None:
+                    fin_factors["Market_Cap_KRW"] = q["market_cap"]
+                    eok = float(q["market_cap"]) / 100_000_000
+                    fin_interp["시가총액"] = f"{eok:,.0f}억원"
+            except Exception as e:  # noqa: BLE001
+                logger.debug("KIS valuation seed failed for %s: %s", ticker, e)
+
         result["financial"] = {"factors": fin_factors, "interpretation": fin_interp}
     except Exception as e:
         logger.warning("Financial factors failed: %s", e)
