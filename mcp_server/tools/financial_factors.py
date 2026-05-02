@@ -67,7 +67,13 @@ def _dart_financials(ticker: str) -> dict:
 
     fut = _DART_EXEC.submit(_do_pull)
     try:
-        result = fut.result(timeout=8.0)
+        # DART's finstate_all is a heavy pull — it downloads the full
+        # annual filing and re-parses it row by row. Local timing puts
+        # it around 10-15 s on a warm endpoint, longer from cloud
+        # egress. 8 s was too tight (every KR ticker fell back to
+        # KIS valuation only). 20 s lets the cold pull land while the
+        # 24h cache makes subsequent loads sub-second anyway.
+        result = fut.result(timeout=20.0)
     except _FutureTimeout:
         logger.warning("DART pull timed out for %s — short-lived sentinel cached.", ticker)
         cache_manager.set(key, {"_dart_timeout": True}, ttl=_DART_NEG_TTL)
