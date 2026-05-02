@@ -126,23 +126,35 @@ class DartClient:
                             if c in df.columns), None)
             if not amt_col:
                 return {"source": "dart", "year": use_year}
+            # ``frmtrm_amount`` is the same field for the immediately
+            # preceding fiscal year, used to compute Revenue_Growth /
+            # EPS_Growth without a second API round trip.
+            prev_col = next((c for c in ("frmtrm_amount", "frmtrm_add_amount")
+                             if c in df.columns), None)
 
-            def _pick(keys: list[str]) -> float | None:
+            def _pick_value(keys: list[str], col: str) -> float | None:
                 for k in keys:
-                    rows = df[df.get("account_nm", "").astype(str).str.contains(k, na=False)]
+                    rows = df[df.get("account_nm", "").astype(str).str.contains(k, na=False, regex=False)]
                     if not rows.empty:
                         try:
-                            raw = str(rows.iloc[0][amt_col]).replace(",", "").strip()
-                            return float(raw) if raw and raw != "nan" else None
+                            raw = str(rows.iloc[0][col]).replace(",", "").strip()
+                            return float(raw) if raw and raw not in ("nan", "-") else None
                         except Exception:  # noqa: BLE001
                             continue
                 return None
+
+            def _pick(keys: list[str]) -> float | None:
+                return _pick_value(keys, amt_col)
+
+            def _pick_prev(keys: list[str]) -> float | None:
+                return _pick_value(keys, prev_col) if prev_col else None
 
             revenue = _pick(["매출액", "영업수익"])
             op_income = _pick(["영업이익"])
             net_income = _pick(["당기순이익"])
             equity = _pick(["자본총계"])
             assets = _pick(["자산총계"])
+            liabilities = _pick(["부채총계"])
 
             out: dict[str, Any] = {"source": "dart", "year": use_year}
             if equity and net_income:
@@ -153,10 +165,31 @@ class DartClient:
                 out["Operating_Margin"] = op_income / revenue
             if revenue and net_income:
                 out["Net_Margin"] = net_income / revenue
-            # Revenue growth requires previous-year comparison — skip if absent.
-            prev_rev = _pick(["매출액(전기)"])
+
+            # Solvency — derive from balance-sheet identity when the
+            # explicit liability row is absent so we don't need a second
+            # filing call.
+            if liabilities is None and assets and equity:
+                liabilities = assets - equity
+            if liabilities is not None and equity:
+                out["Debt_to_Equity"] = liabilities / equity
+            if liabilities is not None and assets:
+                out["Debt_to_Asset"] = liabilities / assets
+
+            # Efficiency — coarse but useful when yfinance is rate-limited.
+            if revenue and assets:
+                out["Asset_Turnover"] = revenue / assets
+
+            # Growth — proper YoY using ``frmtrm_amount`` (DART's own
+            # previous-period column on every row), not a separate
+            # ``매출액(전기)`` lookup which doesn't exist as an account.
+            prev_rev = _pick_prev(["매출액", "영업수익"])
             if revenue and prev_rev:
                 out["Revenue_Growth"] = (revenue - prev_rev) / prev_rev
+            prev_net = _pick_prev(["당기순이익"])
+            if net_income and prev_net:
+                out["EPS_Growth"] = (net_income - prev_net) / prev_net
+
             return out
         except Exception as e:  # noqa: BLE001
             logger.warning("DART financials failed for %s: %s", ticker, e)

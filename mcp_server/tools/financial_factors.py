@@ -14,8 +14,52 @@ from typing import Dict, Optional
 import logging
 import yfinance as yf
 from .yf_utils import normalize_ticker_multi_market, is_yfinance_supported
+from .cache_manager import cached, TTL
 
 logger = logging.getLogger(__name__)
+
+
+def _is_kr(market: str) -> bool:
+    return (market or "US").strip().upper() == "KR"
+
+
+def _dart_financials(ticker: str) -> dict:
+    """24h-cached DART filing pull, shared across calculate_* methods.
+
+    Without this every method (profitability/health/efficiency/...) would
+    re-issue the same DART RPC and the upstream rate-limit kicks in
+    almost immediately. One pull per ticker per day is plenty — annual
+    filings change at most quarterly.
+
+    Empty results are intentionally NOT cached so a transient DART hiccup
+    or a missing-then-set ``DART_API_KEY`` doesn't poison the slot for 24h.
+    Only meaningful payloads (with at least one extracted ratio) hit cache.
+    """
+    from .cache_manager import cache_manager
+    key = f"dart_fin:{ticker}"
+    hit = cache_manager.get(key)
+    if isinstance(hit, dict) and hit and any(
+        hit.get(k) is not None for k in ("ROE", "ROA", "Operating_Margin", "Net_Margin")
+    ):
+        return hit
+    try:
+        from mcp_server.tools.dart import get_dart_client
+        result = get_dart_client().get_financials(ticker) or {}
+    except Exception as e:  # noqa: BLE001
+        logger.debug("DART pull failed for %s: %s", ticker, e)
+        return {}
+    # Only cache when we actually got numeric ratios — sentinel-only
+    # ``{"source": "dart"}`` dicts and empty dicts retry next call.
+    if result and any(
+        result.get(k) is not None for k in ("ROE", "ROA", "Operating_Margin", "Net_Margin")
+    ):
+        cache_manager.set(key, result, ttl=TTL.FUNDAMENTAL)
+    return result
+
+
+def _kr_financials_or_empty(ticker: str, market: str) -> dict:
+    """Convenience wrapper — returns DART dict only when market is KR."""
+    return _dart_financials(ticker) if _is_kr(market) else {}
 
 
 class FinancialFactors:
@@ -25,6 +69,7 @@ class FinancialFactors:
     # 그룹 1: 수익성 지표 (5개)
     # ============================================================
     @staticmethod
+    @cached(ttl=TTL.FUNDAMENTAL, prefix="ff_profit")
     def calculate_profitability(ticker: str, market: str = "US") -> Dict[str, float]:
         """수익성 지표 계산
 
@@ -41,6 +86,19 @@ class FinancialFactors:
                 'Net_Margin': float
             }
         """
+        # KR — DART 우선. DART 한 번 쿼리로 ROE/ROA/Op_Margin/Net_Margin
+        # 4종 채워지므로 yfinance rate-limit이 터져도 표 4/5 건짐. ROIC는
+        # NOPAT 계산이 필요해 DART 단일 호출로는 못 만들어 NaN으로 둔다.
+        if _is_kr(market):
+            d = _dart_financials(ticker)
+            if d.get("ROE") is not None or d.get("Operating_Margin") is not None:
+                return {
+                    "ROE": d.get("ROE", np.nan),
+                    "ROA": d.get("ROA", np.nan),
+                    "ROIC": np.nan,
+                    "Operating_Margin": d.get("Operating_Margin", np.nan),
+                    "Net_Margin": d.get("Net_Margin", np.nan),
+                }
         try:
             # 티커 정규화
             normalized_ticker = normalize_ticker_multi_market(ticker, market)
@@ -122,6 +180,7 @@ class FinancialFactors:
     # 그룹 2: 재무 건전성 지표 (5개)
     # ============================================================
     @staticmethod
+    @cached(ttl=TTL.FUNDAMENTAL, prefix="ff_health")
     def calculate_financial_health(ticker: str, market: str = "US") -> Dict[str, float]:
         """재무 건전성 지표 계산
 
@@ -134,6 +193,19 @@ class FinancialFactors:
                 'Debt_to_Asset': float
             }
         """
+        # KR — DART의 자본/자산/부채 항목으로 Debt_to_Equity·Debt_to_Asset
+        # 2종 즉시 산출. Current/Quick/Interest Coverage는 단일 연차
+        # 보고서로는 부족해 NaN.
+        if _is_kr(market):
+            d = _dart_financials(ticker)
+            if d.get("Debt_to_Equity") is not None or d.get("Debt_to_Asset") is not None:
+                return {
+                    "Debt_to_Equity": d.get("Debt_to_Equity", np.nan),
+                    "Current_Ratio": np.nan,
+                    "Quick_Ratio": np.nan,
+                    "Interest_Coverage": np.nan,
+                    "Debt_to_Asset": d.get("Debt_to_Asset", np.nan),
+                }
         try:
             normalized_ticker = normalize_ticker_multi_market(ticker, market)
             # Skip yfinance for KR special listings (REIT/ETN/A-prefix
@@ -205,6 +277,7 @@ class FinancialFactors:
     # 그룹 3: 효율성 지표 (5개)
     # ============================================================
     @staticmethod
+    @cached(ttl=TTL.FUNDAMENTAL, prefix="ff_eff")
     def calculate_efficiency(ticker: str, market: str = "US") -> Dict[str, float]:
         """효율성 지표 계산
 
@@ -217,6 +290,18 @@ class FinancialFactors:
                 'FCF_to_Sales': float
             }
         """
+        # KR — DART에서 매출/자산만 있으면 Asset_Turnover 1종 산출.
+        # 나머지는 inventory/receivables 등 분기별 세부가 필요해 NaN.
+        if _is_kr(market):
+            d = _dart_financials(ticker)
+            if d.get("Asset_Turnover") is not None:
+                return {
+                    "Asset_Turnover": d.get("Asset_Turnover", np.nan),
+                    "Inventory_Turnover": np.nan,
+                    "Receivables_Turnover": np.nan,
+                    "Working_Capital_Turnover": np.nan,
+                    "FCF_to_Sales": np.nan,
+                }
         try:
             normalized_ticker = normalize_ticker_multi_market(ticker, market)
             # Skip yfinance for KR special listings (REIT/ETN/A-prefix
@@ -325,6 +410,7 @@ class FinancialFactors:
     # 그룹 4: 배당 지표 (3개)
     # ============================================================
     @staticmethod
+    @cached(ttl=TTL.FUNDAMENTAL, prefix="ff_div")
     def calculate_dividend(ticker: str, market: str = "US") -> Dict[str, float]:
         """배당 지표 계산
 
@@ -335,6 +421,9 @@ class FinancialFactors:
                 'Dividend_Growth': float
             }
         """
+        # 배당 정보는 DART 정기 보고서에서 직접 추출하기 어렵고
+        # (배당정책은 별도 공시), KIS quote도 dividend yield를 안 줌.
+        # 그냥 yfinance를 시도하되, KR 특수 listing은 단락.
         try:
             normalized_ticker = normalize_ticker_multi_market(ticker, market)
             # Skip yfinance for KR special listings (REIT/ETN/A-prefix
@@ -391,6 +480,7 @@ class FinancialFactors:
     # 그룹 5: 성장성 지표 (2개)
     # ============================================================
     @staticmethod
+    @cached(ttl=TTL.FUNDAMENTAL, prefix="ff_growth")
     def calculate_growth(ticker: str, market: str = "US") -> Dict[str, float]:
         """성장성 지표 계산
 
@@ -400,6 +490,16 @@ class FinancialFactors:
                 'EPS_Growth': float
             }
         """
+        # KR — DART의 thstrm vs frmtrm로 YoY 직접 산출. EPS 자체는 없지만
+        # 당기순이익 YoY를 EPS_Growth 근사로 사용 (발행주식수 변동 적은
+        # 일반적 케이스에서 차이 작음).
+        if _is_kr(market):
+            d = _dart_financials(ticker)
+            if d.get("Revenue_Growth") is not None or d.get("EPS_Growth") is not None:
+                return {
+                    "Revenue_Growth": d.get("Revenue_Growth", np.nan),
+                    "EPS_Growth": d.get("EPS_Growth", np.nan),
+                }
         try:
             normalized_ticker = normalize_ticker_multi_market(ticker, market)
             # Skip yfinance for KR special listings (REIT/ETN/A-prefix
@@ -457,6 +557,7 @@ class FinancialFactors:
     # 통합 함수
     # ============================================================
     @staticmethod
+    @cached(ttl=TTL.FUNDAMENTAL, prefix="ff_all")
     def calculate_all(ticker: str, market: str = "US") -> Dict[str, float]:
         """20개 재무 팩터 통합 계산
 
