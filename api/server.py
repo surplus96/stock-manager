@@ -279,6 +279,45 @@ def api_circuit_status():
     return get_all_circuit_status()
 
 
+@app.get("/api/diag/dart", tags=["health"])
+def api_diag_dart(ticker: str = "005930"):
+    """Direct DART probe + sentinel cache state.
+
+    Bypasses the financial_factors cache layer to tell apart
+    'DART is genuinely slow/blocked' from 'we cached an old failure
+    sentinel that is now stuck poisoning every retry'.
+    """
+    import time as _time
+    from mcp_server.tools.cache_manager import cache_manager
+    from mcp_server.tools.dart import get_dart_client
+
+    cache_key = f"dart_fin:{ticker}"
+    cached_state = cache_manager.get(cache_key)
+    cleared = False
+    if isinstance(cached_state, dict) and cached_state.get("_dart_timeout"):
+        cache_manager.delete(cache_key)
+        cleared = True
+
+    t0 = _time.monotonic()
+    try:
+        raw = get_dart_client().get_financials(ticker)
+    except Exception as e:  # noqa: BLE001
+        raw = {"_error": str(e)}
+    elapsed = round(_time.monotonic() - t0, 2)
+
+    return {
+        "ticker": ticker,
+        "cached_state_before": cached_state,
+        "cleared_timeout_sentinel": cleared,
+        "direct_dart_call_seconds": elapsed,
+        "direct_dart_result": raw,
+        "ratios_present": [k for k in ("ROE", "ROA", "Operating_Margin", "Net_Margin",
+                                        "Debt_to_Equity", "Asset_Turnover",
+                                        "Revenue_Growth", "EPS_Growth")
+                           if isinstance(raw, dict) and raw.get(k) is not None],
+    }
+
+
 @app.get("/api/diag/kis", tags=["health"])
 def api_diag_kis():
     """Tiny diagnostic for KIS Developers credentials.
