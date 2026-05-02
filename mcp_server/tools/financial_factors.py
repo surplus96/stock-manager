@@ -25,22 +25,31 @@ def _is_kr(market: str) -> bool:
 
 _DART_NEG_TTL = 10 * 60  # 10 min — short cache for failure cases
 
+# Module-level executor so a timed-out DART call leaks its worker
+# thread into the pool background instead of blocking the caller via
+# ``with`` block teardown — that was the silent culprit when the first
+# timeout patch still hung the request.
+from concurrent.futures import ThreadPoolExecutor as _ThreadPool, TimeoutError as _FutureTimeout
+_DART_EXEC = _ThreadPool(max_workers=2, thread_name_prefix="dart-pull")
+
 
 def _dart_financials(ticker: str) -> dict:
     """24h-cached DART filing pull, shared across calculate_* methods.
 
-    OpenDartReader uses bare ``requests`` calls without timeout, so a
-    slow / blocked endpoint can hang the worker thread for minutes —
-    the symptom we hit on HF Spaces where every KR ticker request
-    timed out at 90 s. We therefore run the pull in a worker thread
-    with a hard 8-second deadline and treat anything past that as a
-    soft failure (cache the failure for 10 min so we don't re-hang
-    every subsequent request, then retry later).
+    OpenDartReader wraps bare ``requests`` calls with no timeout, so a
+    slow / blocked endpoint can hang a worker for minutes. We submit
+    the pull to a long-lived module-level executor and bail at 8 s.
+
+    Critically we do NOT cancel/shutdown after timeout: future.cancel()
+    is a no-op once the thread has started, and ``with ThreadPoolExecutor:``
+    teardown re-blocks until the worker finishes — which was why the
+    first-cut fix still hung. Letting the worker run to completion in
+    the background is fine: the next call hits the failure-sentinel
+    cache below and never blocks again.
 
     Successful payloads (with at least one extracted ratio) hit the
     full TTL.FUNDAMENTAL (24h) cache.
     """
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
     from .cache_manager import cache_manager
 
     key = f"dart_fin:{ticker}"
@@ -56,11 +65,11 @@ def _dart_financials(ticker: str) -> dict:
             logger.debug("DART pull failed for %s: %s", ticker, e)
             return {}
 
+    fut = _DART_EXEC.submit(_do_pull)
     try:
-        with ThreadPoolExecutor(max_workers=1) as ex:
-            result = ex.submit(_do_pull).result(timeout=8.0)
-    except FutureTimeoutError:
-        logger.warning("DART pull timed out for %s — caching short-lived empty.", ticker)
+        result = fut.result(timeout=8.0)
+    except _FutureTimeout:
+        logger.warning("DART pull timed out for %s — short-lived sentinel cached.", ticker)
         cache_manager.set(key, {"_dart_timeout": True}, ttl=_DART_NEG_TTL)
         return {}
     except Exception as e:  # noqa: BLE001
@@ -74,7 +83,7 @@ def _dart_financials(ticker: str) -> dict:
         cache_manager.set(key, result, ttl=TTL.FUNDAMENTAL)
     else:
         # Sentinel-only or empty — cache the empty state briefly so we
-        # don't pay the 8s thread spin-up on every retry.
+        # don't pay another 8s round-trip on every retry.
         cache_manager.set(key, {"_dart_empty": True}, ttl=_DART_NEG_TTL)
         return {}
     return result
