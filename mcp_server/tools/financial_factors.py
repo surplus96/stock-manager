@@ -23,37 +23,60 @@ def _is_kr(market: str) -> bool:
     return (market or "US").strip().upper() == "KR"
 
 
+_DART_NEG_TTL = 10 * 60  # 10 min — short cache for failure cases
+
+
 def _dart_financials(ticker: str) -> dict:
     """24h-cached DART filing pull, shared across calculate_* methods.
 
-    Without this every method (profitability/health/efficiency/...) would
-    re-issue the same DART RPC and the upstream rate-limit kicks in
-    almost immediately. One pull per ticker per day is plenty — annual
-    filings change at most quarterly.
+    OpenDartReader uses bare ``requests`` calls without timeout, so a
+    slow / blocked endpoint can hang the worker thread for minutes —
+    the symptom we hit on HF Spaces where every KR ticker request
+    timed out at 90 s. We therefore run the pull in a worker thread
+    with a hard 8-second deadline and treat anything past that as a
+    soft failure (cache the failure for 10 min so we don't re-hang
+    every subsequent request, then retry later).
 
-    Empty results are intentionally NOT cached so a transient DART hiccup
-    or a missing-then-set ``DART_API_KEY`` doesn't poison the slot for 24h.
-    Only meaningful payloads (with at least one extracted ratio) hit cache.
+    Successful payloads (with at least one extracted ratio) hit the
+    full TTL.FUNDAMENTAL (24h) cache.
     """
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
     from .cache_manager import cache_manager
+
     key = f"dart_fin:{ticker}"
     hit = cache_manager.get(key)
-    if isinstance(hit, dict) and hit and any(
-        hit.get(k) is not None for k in ("ROE", "ROA", "Operating_Margin", "Net_Margin")
-    ):
-        return hit
+    if isinstance(hit, dict) and hit:
+        return hit  # works for both real payloads and short-lived failure sentinel
+
+    def _do_pull() -> dict:
+        try:
+            from mcp_server.tools.dart import get_dart_client
+            return get_dart_client().get_financials(ticker) or {}
+        except Exception as e:  # noqa: BLE001
+            logger.debug("DART pull failed for %s: %s", ticker, e)
+            return {}
+
     try:
-        from mcp_server.tools.dart import get_dart_client
-        result = get_dart_client().get_financials(ticker) or {}
-    except Exception as e:  # noqa: BLE001
-        logger.debug("DART pull failed for %s: %s", ticker, e)
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            result = ex.submit(_do_pull).result(timeout=8.0)
+    except FutureTimeoutError:
+        logger.warning("DART pull timed out for %s — caching short-lived empty.", ticker)
+        cache_manager.set(key, {"_dart_timeout": True}, ttl=_DART_NEG_TTL)
         return {}
-    # Only cache when we actually got numeric ratios — sentinel-only
-    # ``{"source": "dart"}`` dicts and empty dicts retry next call.
-    if result and any(
+    except Exception as e:  # noqa: BLE001
+        logger.warning("DART pull errored for %s: %s", ticker, e)
+        return {}
+
+    has_ratios = isinstance(result, dict) and any(
         result.get(k) is not None for k in ("ROE", "ROA", "Operating_Margin", "Net_Margin")
-    ):
+    )
+    if has_ratios:
         cache_manager.set(key, result, ttl=TTL.FUNDAMENTAL)
+    else:
+        # Sentinel-only or empty — cache the empty state briefly so we
+        # don't pay the 8s thread spin-up on every retry.
+        cache_manager.set(key, {"_dart_empty": True}, ttl=_DART_NEG_TTL)
+        return {}
     return result
 
 
